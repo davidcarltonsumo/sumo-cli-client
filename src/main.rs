@@ -2,9 +2,11 @@ extern crate hyper;
 extern crate rpassword;
 extern crate time;
 
+mod session;
+
+use session::Session;
+
 use hyper::client::Client;
-use hyper::header::{Headers, Authorization, Basic, ContentType};
-use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use rpassword::read_password;
 use std::env;
 use std::io;
@@ -21,15 +23,7 @@ fn main() {
 
     let client = Client::new();
 
-    let mut headers = Headers::new();
-    headers.set(Authorization(Basic {
-        username: username.to_owned(),
-        password: Some(password.to_owned())
-    }));
-    headers.set(ContentType(Mime(
-        TopLevel::Application, SubLevel::Json,
-        vec![(Attr::Charset, Value::Utf8)]
-            )));
+    let session = Session::new(username, &password);
     let now = time::get_time();
     let end = now.sec * 1000;
     let start = end - (60 * 1000);
@@ -39,7 +33,7 @@ fn main() {
     println!("{}", body);
 
     let mut res = client.post(endpoint)
-        .headers(headers)
+        .headers(session.headers)
         .body(body)
         .send()
         .unwrap();
