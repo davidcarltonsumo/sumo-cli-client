@@ -13,6 +13,7 @@ use std::io;
 use std::io::{Read, Write};
 use time::get_time;
 
+#[cfg_attr(test, allow(dead_code))]
 fn main() {
     let endpoint = "https://api.sumologic.com/api/v1/search/jobs";
     let args: Vec<_> = env::args().collect();
@@ -23,7 +24,7 @@ fn main() {
 
     let client = Client::new();
 
-    let session = Session::new(username, &password);
+    let mut session = Session::new(username, &password);
     let now = time::get_time();
     let end = now.sec * 1000;
     let start = end - (60 * 1000);
@@ -33,7 +34,7 @@ fn main() {
     println!("{}", body);
 
     let mut res = client.post(endpoint)
-        .headers(session.headers)
+        .headers(session.current_headers())
         .body(body)
         .send()
         .unwrap();
@@ -42,4 +43,6 @@ fn main() {
     let mut response_body = String::new();
     res.read_to_string(&mut response_body).unwrap();
     println!("Response: {}", response_body);
+    session.on_response(&res.headers);
+    println!("New URL: {}", session.url());
 }
