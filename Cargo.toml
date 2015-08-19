@@ -2,3 +2,7 @@
 name = "sumo-cli-client"
 version = "0.1.0"
 authors = ["David Carlton <carlton@sumologic.com>"]
+
+[dependencies]
+hyper = "0.6.0"
+rpassword = "0.0.4"
