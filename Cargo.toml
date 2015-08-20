@@ -8,6 +8,7 @@ authors = ["David Carlton <carlton@sumologic.com>"]
 # so pin those two.
 cookie = "0.1.*"
 hyper = "0.6.*"
+getopts = "*"
 rpassword = "*"
 rustc-serialize = "*"
 time = "*"
