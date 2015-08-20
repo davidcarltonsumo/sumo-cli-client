@@ -10,12 +10,13 @@ mod session;
 
 use search::Searcher;
 
-use getopts::Options;
+use getopts::{Matches, Options};
 use rpassword::read_password;
-use time::get_time;
+use time::{get_time, strptime};
 
 use std::env;
 use std::io::{self, Write};
+use std::process::exit;
 
 static DEFAULT_ENDPOINT: &'static str =
     "https://api.sumologic.com/api/v1/search/jobs";
@@ -28,6 +29,13 @@ fn main() {
                    &format!("The full API endpoint, e.g. {}",
                             DEFAULT_ENDPOINT),
                    "ENDPOINT");
+    options.optopt("m", "minutes",
+                   "Width of search in minutes (defaults to 15)", "MINUTES");
+    options.optopt("f", "from",
+                   "Start time in UTC; can't be used if -m is provided",
+                   "START_TIME");
+    options.optopt("t", "to", "End time in UTC (defaults to now)",
+                   "END_TIME");
     options.optflag("d", "debug", "Print extra debugging information");
     options.optflag("h", "help", "Print this help menu");
 
@@ -52,6 +60,8 @@ fn main() {
     }
     let username = matches.opt_str("u").unwrap();
 
+    let (start, end) = parse_time(&matches);
+
     if matches.free.len() != 1 {
         print_usage(&program, options);
         return;
@@ -62,10 +72,6 @@ fn main() {
     print!("Password: ");
     io::stdout().flush().unwrap();
     let password = read_password().unwrap();
-
-    let now = time::get_time();
-    let end = now.sec * 1000;
-    let start = end - (60 * 1000);
 
     let debug = matches.opt_present("d");
 
@@ -79,6 +85,51 @@ fn main() {
 }
 
 fn print_usage(program: &str, options: Options) {
-    let brief = format!("Usage: {} [-e endpoint] -u username QUERY", program);
+    let brief = format!("Usage: {} [options] -u username QUERY", program);
     print!("{}", options.usage(&brief));
+}
+
+fn parse_time(matches: &Matches) -> (i64, i64) {
+    let time_format = "%Y-%m-%dT%H:%M:%S";
+    let time_error =
+        "Time must be in format YYYY-MM-DDTHH:MM:SS, e.g. 2015-08-20T13:54:13";
+
+    if matches.opt_present("m") && matches.opt_present("f") {
+        println!("You can specify at most one of -m and -f.");
+        exit(1);
+    }
+
+    let end_time = if matches.opt_present("t") {
+        match strptime(&matches.opt_str("t").unwrap(),
+                       time_format) {
+            Ok(t) => t.to_timespec(),
+            Err(_) => {
+                println!("{}", time_error);
+                exit(1)
+            },
+        }
+    } else {
+        get_time()
+    };
+    let end = end_time.sec * 1000;
+
+    let start = if matches.opt_present("f") {
+        match strptime(&matches.opt_str("f").unwrap(),
+                       time_format) {
+            Ok(t) => t.to_timespec().sec * 1000,
+            Err(_) => {
+                println!("{}", time_error);
+                exit(1)
+            },
+        }
+    } else {
+        let minutes_string = matches.opt_str("m").unwrap_or("15".to_owned());
+        let minutes = minutes_string.parse::<i64>().unwrap_or_else(|_| {
+            println!("Non-numeric argument to -m");
+            exit(1)
+        });
+        end - minutes * 60 * 1000
+    };
+
+    (start, end)
 }
