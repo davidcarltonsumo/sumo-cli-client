@@ -33,7 +33,9 @@ fn main() {
     let debug = true;
 
     let searcher = Searcher::new(endpoint, username, &password,
-                                 "error", start, end, debug);
+                                 "error | count by _sourcecategory",
+                                 start, end,
+                                 debug);
 
     searcher.complete_search();
 }

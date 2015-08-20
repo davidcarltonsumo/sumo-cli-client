@@ -4,6 +4,7 @@ use hyper::client::Client;
 use hyper::client::response::Response;
 use rustc_serialize::json;
 
+use std::cmp::min;
 use std::io::Read;
 use std::thread;
 
@@ -98,9 +99,18 @@ impl Searcher {
             }
         }
 
-        for result in last_status_result_opt.as_ref().iter() {
-            println!("messageCount: {}", result.messageCount);
-            println!("recordCount: {}", result.recordCount);
+        match last_status_result_opt {
+            Some(status_result) => {
+                if status_result.state == "DONE GATHERING RESULTS" {
+                    self.fetch_results(status_result);
+                } else {
+                    println!("Query did not finish correctly, state={}",
+                             status_result.state);
+                }
+            }
+            None => {
+                println!("Error getting status!")
+            }
         }
 
         let mut delete_response = self.client.delete(&self.session.url())
@@ -109,6 +119,25 @@ impl Searcher {
             .unwrap();
 
         self.consume_response(&mut delete_response);
+    }
+
+    fn fetch_results(&self, status_result: StatusResult) {
+        // This isn't a good heuristic - I filed SUMO-47206 for that.
+        let url: String = if status_result.recordCount > 0 {
+            format!("{}/records?offset=0&limit={}",
+                    self.session.url(),
+                    min(status_result.recordCount, 10000))
+        } else {
+            format!("{}/messages?offset=0&limit={}",
+                    self.session.url(),
+                    min(status_result.messageCount, 10000))
+        };
+        let mut fetch_response = self.client.get(&url)
+            .headers(self.session.current_headers())
+            .send()
+            .unwrap();
+
+        println!("{}", self.consume_response(&mut fetch_response));
     }
 
     fn consume_response(&self, response: &mut Response) -> String {
