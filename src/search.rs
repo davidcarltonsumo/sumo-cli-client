@@ -2,7 +2,7 @@ use session::Session;
 
 use hyper::client::Client;
 use hyper::client::response::Response;
-use rustc_serialize::json;
+use rustc_serialize::json::{self, Json};
 
 use std::cmp::min;
 use std::io::Read;
@@ -123,21 +123,37 @@ impl Searcher {
 
     fn fetch_results(&self, status_result: StatusResult) {
         // This isn't a good heuristic - I filed SUMO-47206 for that.
-        let url: String = if status_result.recordCount > 0 {
-            format!("{}/records?offset=0&limit={}",
-                    self.session.url(),
-                    min(status_result.recordCount, 10000))
+        let method = if status_result.recordCount > 0 {
+            "records"
         } else {
-            format!("{}/messages?offset=0&limit={}",
-                    self.session.url(),
-                    min(status_result.messageCount, 10000))
+            "messages"
         };
-        let mut fetch_response = self.client.get(&url)
-            .headers(self.session.current_headers())
-            .send()
-            .unwrap();
+        let count = if status_result.recordCount > 0 {
+            status_result.recordCount
+        } else {
+            status_result.messageCount
+        };
 
-        println!("{}", self.consume_response(&mut fetch_response));
+        let mut offset = 0;
+        while offset < count {
+            let url = format!("{}/{}?offset={}&limit={}",
+                              self.session.url(),
+                              method,
+                              offset,
+                              min(count - offset, 10000));
+
+            let mut fetch_response = self.client.get(&url)
+                .headers(self.session.current_headers())
+                .send()
+                .unwrap();
+            let fetch_body = self.consume_response(&mut fetch_response);
+
+            for row in rows_from(&fetch_body, method).iter() {
+                println!("{}", row);
+            }
+
+            offset += 10000;
+        }
     }
 
     fn consume_response(&self, response: &mut Response) -> String {
@@ -151,4 +167,20 @@ impl Searcher {
         }
         response_body
     }
+}
+
+fn rows_from(fetch_body: &str,
+             method: &str) -> Vec<Json> {
+    // FIXME (2015-08-15, carlton): I'd like to do the typed JSON
+    // decoding here, but it doesn't let me decode partway and then
+    // return Json.
+    Json::from_str(fetch_body).unwrap()
+        .as_object().unwrap()
+        .get(method).unwrap()
+        .as_array().unwrap().iter()
+        .map(|record|
+             record.as_object().unwrap()
+             .get("map").unwrap()
+             .to_owned())
+        .collect()
 }
