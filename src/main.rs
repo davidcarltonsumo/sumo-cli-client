@@ -70,6 +70,13 @@ fn main() {
         .unwrap();
 
     print_response(&mut status_response);
+
+    let mut delete_response = client.delete(&session.url())
+        .headers(session.current_headers())
+        .send()
+        .unwrap();
+
+    print_response(&mut delete_response);
 }
 
 fn print_response(response: &mut Response) -> String {
