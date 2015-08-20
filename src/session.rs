@@ -41,13 +41,16 @@ impl Session {
             println!("{}", header);
         }
 
-        // SUMO-47175: Don't trust the Location header.
-        let body_json = Json::from_str(response_body).unwrap();
-        self.url_opt = body_json.as_object().unwrap()
-            .get("link").unwrap()
-            .as_object().unwrap()
-            .get("href").unwrap()
-            .as_string().map(|s| s.to_owned());
+        // SUMO-47175: Don't trust the Location header, grab the
+        // url from the body instead.
+        let body_json_result = Json::from_str(response_body);
+        self.url_opt = body_json_result.ok().as_ref()
+            .and_then(|o| o.as_object())
+            .and_then(|o| o.get("link"))
+            .and_then(|o| o.as_object())
+            .and_then(|o| o.get("href"))
+            .and_then(|o| o.as_string())
+            .map(|s| s.to_owned());
 
         let cookie_header_opt = header_of_type::<SetCookie>(response_headers);
         let mut cookie_jar = CookieJar::new(
