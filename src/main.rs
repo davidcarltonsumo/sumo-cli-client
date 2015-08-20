@@ -30,8 +30,10 @@ fn main() {
     let end = now.sec * 1000;
     let start = end - (60 * 1000);
 
+    let debug = true;
+
     let searcher = Searcher::new(endpoint, username, &password,
-                                 "error", start, end);
+                                 "error", start, end, debug);
 
     searcher.complete_search();
 }

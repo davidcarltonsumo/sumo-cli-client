@@ -6,14 +6,16 @@ use rustc_serialize::json::Json;
 pub struct Session {
     headers: Headers,
     url_opt: Option<String>,
+    debug: bool,
 }
 
 impl Session {
-    pub fn new(username: &str, password: &str) -> Session {
+    pub fn new(username: &str, password: &str,
+               debug: bool) -> Session {
         let mut headers = Headers::new();
         headers.set(Authorization(Basic {
             username: username.to_owned(),
-            password: Some(password.to_owned())
+            password: Some(password.to_owned()),
         }));
         headers.set(ContentType(Mime(
             TopLevel::Application, SubLevel::Json,
@@ -23,6 +25,7 @@ impl Session {
         Session {
             headers: headers,
             url_opt: None,
+            debug: debug,
         }
     }
 
@@ -37,8 +40,10 @@ impl Session {
     pub fn on_creation(&mut self,
                        response_headers: &Headers,
                        response_body: &str) {
-        for header in response_headers.iter() {
-            println!("{}", header);
+        if self.debug {
+            for header in response_headers.iter() {
+                println!("{}", header);
+            }
         }
 
         // SUMO-47175: Don't trust the Location header, grab the
@@ -85,7 +90,7 @@ mod tests {
 
     #[test]
     fn it_should_extract_the_url_from_the_response() {
-        let mut session = Session::new("username", "password");
+        let mut session = Session::new("username", "password", false);
 
         let response_headers = Headers::new();
 
@@ -96,7 +101,7 @@ mod tests {
 
     #[test]
     fn it_should_send_back_cookies_from_the_create_request() {
-        let mut session = Session::new("username", "password");
+        let mut session = Session::new("username", "password", false);
 
         let mut response_headers = Headers::new();
 
