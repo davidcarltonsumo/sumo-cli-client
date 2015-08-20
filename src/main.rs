@@ -1,6 +1,7 @@
 extern crate cookie;
 extern crate hyper;
 extern crate rpassword;
+extern crate rustc_serialize;
 extern crate time;
 
 mod session;
@@ -10,10 +11,21 @@ use session::Session;
 use hyper::client::Client;
 use hyper::client::response::Response;
 use rpassword::read_password;
+use rustc_serialize::json;
+use time::get_time;
+
 use std::env;
 use std::io;
 use std::io::{Read, Write};
-use time::get_time;
+
+#[derive(RustcEncodable)]
+#[allow(non_snake_case)]
+struct CreateRequest {
+    query: String,
+    from: String,
+    to: String,
+    timeZone: String,
+}
 
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
@@ -31,13 +43,19 @@ fn main() {
     let end = now.sec * 1000;
     let start = end - (60 * 1000);
 
-    let ref body = format!(r#"{{"query":"error","from":"{}","to":"{}","timeZone":"UTC"}}"#,
-                           start, end);
+    let request = CreateRequest {
+        query: "error".to_owned(),
+        from: start.to_string(),
+        to: end.to_string(),
+        timeZone: "UTC".to_owned(),
+    };
+
+    let body = json::encode(&request).unwrap();
     println!("{}", body);
 
     let mut creation_response = client.post(endpoint)
         .headers(session.current_headers())
-        .body(body)
+        .body(&body)
         .send()
         .unwrap();
 
