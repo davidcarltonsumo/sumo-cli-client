@@ -1,6 +1,7 @@
 use cookie::CookieJar;
 use hyper::header::*;
 use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
+use rustc_serialize::json::Json;
 
 pub struct Session {
     headers: Headers,
@@ -33,13 +34,20 @@ impl Session {
         self.url_opt.as_ref().unwrap().to_owned()
     }
 
-    pub fn on_response(&mut self, response_headers: &Headers) {
+    pub fn on_creation(&mut self,
+                       response_headers: &Headers,
+                       response_body: &str) {
         for header in response_headers.iter() {
             println!("{}", header);
         }
 
-        self.url_opt = header_of_type::<Location>(response_headers)
-            .map(|location| normalize_url(&***location));
+        // SUMO-47175: Don't trust the Location header.
+        let body_json = Json::from_str(response_body).unwrap();
+        self.url_opt = body_json.as_object().unwrap()
+            .get("link").unwrap()
+            .as_object().unwrap()
+            .get("href").unwrap()
+            .as_string().map(|s| s.to_owned());
 
         let cookie_header_opt = header_of_type::<SetCookie>(response_headers);
         let mut cookie_jar = CookieJar::new(
@@ -62,58 +70,25 @@ fn header_of_type<H: Header + HeaderFormat>(headers: &Headers) -> Option<&H> {
         ).next()
 }
 
-// SUMO-47175; the URL in the body of the response is correct, so once I'm
-// parsing that, I can get rid of this.
-fn normalize_url(url: &str) -> String {
-    let components: Vec<_> = url.splitn(2, ":").collect();
-    if components[0] == "http" {
-        "https:".to_owned() + components[1]
-    } else {
-        url.to_owned()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     use cookie::Cookie as CookiePair;
     use hyper::header::*;
-    use hyper::mime::{Mime, TopLevel, SubLevel};
     use std::collections::HashMap;
+
+    static SIMPLE_BODY: &'static str = r#"{"id":"012345689ABCDEF00","link":{"rel":"self","href":"https://foo/bar/012345689ABCDEF00"}}"#;
 
     #[test]
     fn it_should_extract_the_url_from_the_response() {
         let mut session = Session::new("username", "password");
 
-        let mut response_headers = Headers::new();
+        let response_headers = Headers::new();
 
-        response_headers.set(CacheControl(vec![CacheDirective::NoCache]));
-        response_headers.set(Location("https://foo/bar".to_owned()));
-        response_headers.set(ContentType(Mime(
-            TopLevel::Application, SubLevel::Json, vec![])));
+        session.on_creation(&response_headers, SIMPLE_BODY);
 
-        session.on_response(&response_headers);
-
-        assert_eq!(session.url(), "https://foo/bar");
-    }
-
-    // SUMO-47175; the URL in the body of the response is correct, so once I'm
-    // parsing that, I can get rid of this.
-    #[test]
-    fn it_should_make_sure_the_url_is_https() {
-        let mut session = Session::new("username", "password");
-
-        let mut response_headers = Headers::new();
-
-        response_headers.set(CacheControl(vec![CacheDirective::NoCache]));
-        response_headers.set(Location("http://foo/bar".to_owned()));
-        response_headers.set(ContentType(Mime(
-            TopLevel::Application, SubLevel::Json, vec![])));
-
-        session.on_response(&response_headers);
-
-        assert_eq!(session.url(), "https://foo/bar");
+        assert_eq!(session.url(), "https://foo/bar/012345689ABCDEF00");
     }
 
     #[test]
@@ -122,13 +97,14 @@ mod tests {
 
         let mut response_headers = Headers::new();
 
-        response_headers.set(Location("http://foo/bar".to_owned()));
+        response_headers.set(Location(
+            "https://foo/bar/012345689ABCDEF00".to_owned()));
         response_headers.set(SetCookie(vec![
             CookiePair::new("Key1".to_owned(), "val1".to_owned()),
             CookiePair::new("Key2".to_owned(), "val2".to_owned()),
             ]));
 
-        session.on_response(&response_headers);
+        session.on_creation(&response_headers, SIMPLE_BODY);
 
         let updated_headers = session.current_headers();
         let cookie_header =

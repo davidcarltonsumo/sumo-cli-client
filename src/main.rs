@@ -59,9 +59,9 @@ fn main() {
         .send()
         .unwrap();
 
-    print_response(&mut creation_response);
+    let creation_body = print_response(&mut creation_response);
 
-    session.on_response(&creation_response.headers);
+    session.on_creation(&creation_response.headers, &creation_body);
     println!("New URL: {}", session.url());
 
     let mut status_response = client.get(&session.url())
@@ -72,9 +72,10 @@ fn main() {
     print_response(&mut status_response);
 }
 
-fn print_response(response: &mut Response) {
+fn print_response(response: &mut Response) -> String {
     println!("Status: {}", response.status);
     let mut response_body = String::new();
     response.read_to_string(&mut response_body).unwrap();
     println!("Response: {}", response_body);
+    response_body
 }
