@@ -2,7 +2,7 @@ use session::Session;
 
 use hyper::client::Client;
 use hyper::client::response::Response;
-use rustc_serialize::json::{self, Json};
+use rustc_serialize::json;
 
 use std::io::Read;
 use std::thread;
@@ -14,6 +14,14 @@ struct CreateRequest {
     from: String,
     to: String,
     timeZone: String,
+}
+
+#[derive(RustcDecodable)]
+#[allow(non_snake_case)]
+struct StatusResult {
+    state: String,
+    messageCount: i64,
+    recordCount: i64,
 }
 
 pub struct Searcher {
@@ -68,7 +76,7 @@ impl Searcher {
     }
 
     pub fn complete_search(&self) {
-        let mut last_status_response_opt: Option<Json>;
+        let mut last_status_result_opt: Option<StatusResult>;
 
         loop {
             thread::sleep_ms(POLL_INTERVAL);
@@ -79,31 +87,20 @@ impl Searcher {
                 .unwrap();
 
             let body = self.consume_response(&mut status_response);
-            last_status_response_opt = Json::from_str(&body).ok();
-            let status = last_status_response_opt.as_ref()
-                .and_then(|o| o.as_object())
-                .and_then(|o| o.get("state"))
-                .and_then(|o| o.as_string())
-                .unwrap_or("UNKNOWN");
+            last_status_result_opt = json::decode(&body).ok();
+            let state = last_status_result_opt.as_ref()
+                .map(|s| s.state.to_owned())
+                .unwrap_or("UNKNOWN".to_owned());
 
-            match status {
+            match state.as_ref() { 
                 "NOT STARTED" | "GATHERING RESULTS" => continue,
                 _ => break,
             }
         }
 
-        for response_obj in (last_status_response_opt.as_ref()
-                             .and_then(|o| o.as_object()).iter()) {
-            println!("messageCount: {}",
-                     response_obj.get("messageCount")
-                     .and_then(|o| o.as_i64())
-                     .map(|o| o.to_string())
-                     .unwrap_or("unknown".to_owned()));
-            println!("recordCount: {}",
-                     response_obj.get("recordCount")
-                     .and_then(|o| o.as_i64())
-                     .map(|o| o.to_string())
-                     .unwrap_or("unknown".to_owned()));
+        for result in last_status_result_opt.as_ref().iter() {
+            println!("messageCount: {}", result.messageCount);
+            println!("recordCount: {}", result.recordCount);
         }
 
         let mut delete_response = self.client.delete(&self.session.url())
