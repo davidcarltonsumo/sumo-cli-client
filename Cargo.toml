@@ -4,9 +4,10 @@ version = "0.1.0"
 authors = ["David Carlton <carlton@sumologic.com>"]
 
 [dependencies]
-cookie = "0.1.21"
-hyper = "0.6.0"
-rpassword = "0.0.4"
+# hyper depends on a version of cookie that isn't newest,
+# so pin those two.
+cookie = "0.1.*"
+hyper = "0.6.*"
+rpassword = "*"
 rustc-serialize = "*"
-time = "0.1"
-
+time = "*"
