@@ -2,9 +2,10 @@ use session::Session;
 
 use hyper::client::Client;
 use hyper::client::response::Response;
-use rustc_serialize::json;
+use rustc_serialize::json::{self, Json};
 
 use std::io::Read;
+use std::thread;
 
 #[derive(RustcEncodable)]
 #[allow(non_snake_case)]
@@ -20,6 +21,8 @@ pub struct Searcher {
     session: Session,
     debug: bool,
 }
+
+static POLL_INTERVAL: u32 = 300; // milliseconds
 
 impl Searcher {
     pub fn new(endpoint: &str,
@@ -65,12 +68,43 @@ impl Searcher {
     }
 
     pub fn complete_search(&self) {
-        let mut status_response = self.client.get(&self.session.url())
-            .headers(self.session.current_headers())
-            .send()
-            .unwrap();
+        let mut last_status_response_opt: Option<Json>;
 
-        self.consume_response(&mut status_response);
+        loop {
+            thread::sleep_ms(POLL_INTERVAL);
+
+            let mut status_response = self.client.get(&self.session.url())
+                .headers(self.session.current_headers())
+                .send()
+                .unwrap();
+
+            let body = self.consume_response(&mut status_response);
+            last_status_response_opt = Json::from_str(&body).ok();
+            let status = last_status_response_opt.as_ref()
+                .and_then(|o| o.as_object())
+                .and_then(|o| o.get("state"))
+                .and_then(|o| o.as_string())
+                .unwrap_or("UNKNOWN");
+
+            match status {
+                "NOT STARTED" | "GATHERING RESULTS" => continue,
+                _ => break,
+            }
+        }
+
+        for response_obj in (last_status_response_opt.as_ref()
+                             .and_then(|o| o.as_object()).iter()) {
+            println!("messageCount: {}",
+                     response_obj.get("messageCount")
+                     .and_then(|o| o.as_i64())
+                     .map(|o| o.to_string())
+                     .unwrap_or("unknown".to_owned()));
+            println!("recordCount: {}",
+                     response_obj.get("recordCount")
+                     .and_then(|o| o.as_i64())
+                     .map(|o| o.to_string())
+                     .unwrap_or("unknown".to_owned()));
+        }
 
         let mut delete_response = self.client.delete(&self.session.url())
             .headers(self.session.current_headers())
