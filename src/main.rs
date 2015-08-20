@@ -69,8 +69,8 @@ fn main() {
 
     let query = matches.free[0].clone();
 
-    print!("Password: ");
-    io::stdout().flush().unwrap();
+    write!(io::stderr(), "Password: ").unwrap();
+    io::stderr().flush().unwrap();
     let password = read_password().unwrap();
 
     let debug = matches.opt_present("d");
