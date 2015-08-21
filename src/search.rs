@@ -76,7 +76,7 @@ impl Searcher {
         searcher
     }
 
-    pub fn complete_search(&self) {
+    pub fn complete_search(&self, max_count: i64) {
         let mut last_status_result_opt: Option<StatusResult>;
 
         loop {
@@ -102,7 +102,7 @@ impl Searcher {
         match last_status_result_opt {
             Some(status_result) => {
                 if status_result.state == "DONE GATHERING RESULTS" {
-                    self.fetch_results(status_result);
+                    self.fetch_results(status_result, max_count);
                 } else {
                     println!("Query did not finish correctly, state={}",
                              status_result.state);
@@ -121,18 +121,19 @@ impl Searcher {
         self.consume_response(&mut delete_response);
     }
 
-    fn fetch_results(&self, status_result: StatusResult) {
+    fn fetch_results(&self, status_result: StatusResult,
+                     max_count: i64) {
         // This isn't a good heuristic - I filed SUMO-47206 for that.
         let method = if status_result.recordCount > 0 {
             "records"
         } else {
             "messages"
         };
-        let count = if status_result.recordCount > 0 {
+        let count = min(if status_result.recordCount > 0 {
             status_result.recordCount
         } else {
             status_result.messageCount
-        };
+        }, max_count);
 
         let mut offset = 0;
         while offset < count {

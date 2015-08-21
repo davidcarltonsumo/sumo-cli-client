@@ -36,6 +36,8 @@ fn main() {
                    "START_TIME");
     options.optopt("t", "to", "End time in UTC (defaults to now)",
                    "END_TIME");
+    options.optopt("x", "max-count", "Max result count (defaults to 1000)",
+                   "MAX_COUNT");
     options.optflag("d", "debug", "Print extra debugging information");
     options.optflag("h", "help", "Print this help menu");
 
@@ -62,6 +64,8 @@ fn main() {
 
     let (start, end) = parse_time(&matches);
 
+    let max = opt_num_or(&matches, "x", 1000);
+
     if matches.free.len() != 1 {
         print_usage(&program, options);
         return;
@@ -81,7 +85,7 @@ fn main() {
                                  start, end,
                                  debug);
 
-    searcher.complete_search();
+    searcher.complete_search(max);
 }
 
 fn print_usage(program: &str, options: Options) {
@@ -123,13 +127,19 @@ fn parse_time(matches: &Matches) -> (i64, i64) {
             },
         }
     } else {
-        let minutes_string = matches.opt_str("m").unwrap_or("15".to_owned());
-        let minutes = minutes_string.parse::<i64>().unwrap_or_else(|_| {
-            println!("Non-numeric argument to -m");
-            exit(1)
-        });
+        let minutes = opt_num_or(matches, "m", 15);
         end - minutes * 60 * 1000
     };
 
     (start, end)
+}
+
+fn opt_num_or(matches: &Matches,
+              arg: &str,
+              default_value: i64) -> i64 {
+    let match_opt = matches.opt_str(arg);
+    match_opt.map(|s| s.parse::<i64>().unwrap_or_else(|_| {
+        println!("Non-numeric argument to -{}", arg);
+        exit(1)
+    })).unwrap_or(default_value)
 }
